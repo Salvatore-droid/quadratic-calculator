@@ -15,41 +15,82 @@ class _QuadraticSolverScreenState extends State<QuadraticSolverScreen> {
   final TextEditingController _aController = TextEditingController();
   final TextEditingController _bController = TextEditingController();
   final TextEditingController _cController = TextEditingController();
+  final TextEditingController _dController = TextEditingController();
   String _result = '';
   String _equation = '';
+  List<String> _steps = [];
+  bool _isCubic = false;
 
-  void _solveQuadratic() {
+  void _solveEquation() {
     try {
       double a = double.parse(_aController.text);
-      double b = double.parse(_bController.text);
-      double c = double.parse(_cController.text);
-
-      if (a == 0) {
-        setState(() {
-          _result = 'Error: "a" cannot be zero in a quadratic equation';
-          _equation = '';
-        });
-        return;
-      }
-
-      List<dynamic> solutions = AlgebraCalculator.solveQuadratic(a, b, c);
       
-      setState(() {
-        _equation = '${a}x² ${b >= 0 ? '+' : '-'} ${b.abs()}x ${c >= 0 ? '+' : '-'} ${c.abs()} = 0';
-        
-        if (solutions.isEmpty) {
-          _result = 'No real solutions';
-        } else if (solutions.length == 1) {
-          _result = 'One real solution:\nx = ${solutions[0].toStringAsFixed(4)}';
-        } else {
-          _result = 'Two solutions:\nx₁ = ${solutions[0].toStringAsFixed(4)}\nx₂ = ${solutions[1].toStringAsFixed(4)}';
+      if (_isCubic) {
+        double b = double.parse(_bController.text);
+        double c = double.parse(_cController.text);
+        double d = double.parse(_dController.text);
+
+        if (a == 0) {
+          setState(() {
+            _result = 'Error: "a" cannot be zero in a cubic equation';
+            _equation = '';
+            _steps = [];
+          });
+          return;
         }
-      });
+
+        Map<String, dynamic> solution = AlgebraCalculator.solveCubic(a, b, c, d);
+        
+        setState(() {
+          _equation = '${a}x³ ${b >= 0 ? '+' : '-'} ${b.abs()}x² ${c >= 0 ? '+' : '-'} ${c.abs()}x ${d >= 0 ? '+' : '-'} ${d.abs()} = 0';
+          _steps = solution['steps'];
+          _formatResult(solution);
+        });
+      } else {
+        double b = double.parse(_bController.text);
+        double c = double.parse(_cController.text);
+
+        if (a == 0) {
+          setState(() {
+            _result = 'Error: "a" cannot be zero in a quadratic equation';
+            _equation = '';
+            _steps = [];
+          });
+          return;
+        }
+
+        Map<String, dynamic> solution = AlgebraCalculator.solveQuadratic(a, b, c);
+        
+        setState(() {
+          _equation = '${a}x² ${b >= 0 ? '+' : '-'} ${b.abs()}x ${c >= 0 ? '+' : '-'} ${c.abs()} = 0';
+          _steps = solution['steps'];
+          _formatResult(solution);
+        });
+      }
     } catch (e) {
       setState(() {
         _result = 'Error: Please enter valid numbers';
         _equation = '';
+        _steps = [];
       });
+    }
+  }
+
+  void _formatResult(Map<String, dynamic> solution) {
+    _result = 'Solutions:\n';
+    
+    if (solution['solutions'][0] is Map) {
+      // Complex roots
+      final eigen1 = solution['solutions'][0] as Map<String, double>;
+      final eigen2 = solution['solutions'][1] as Map<String, double>;
+      _result += 'x₁ = ${eigen1['real']!.toStringAsFixed(4)} + ${eigen1['imaginary']!.toStringAsFixed(4)}i\n';
+      _result += 'x₂ = ${eigen2['real']!.toStringAsFixed(4)} + ${eigen2['imaginary']!.toStringAsFixed(4)}i\n';
+    } else {
+      // Real roots
+      final solutions = solution['solutions'] as List<double>;
+      for (int i = 0; i < solutions.length; i++) {
+        _result += 'x${i + 1} = ${solutions[i].toStringAsFixed(4)}\n';
+      }
     }
   }
 
@@ -57,9 +98,18 @@ class _QuadraticSolverScreenState extends State<QuadraticSolverScreen> {
     _aController.clear();
     _bController.clear();
     _cController.clear();
+    _dController.clear();
     setState(() {
       _result = '';
       _equation = '';
+      _steps = [];
+    });
+  }
+
+  void _toggleEquationType() {
+    setState(() {
+      _isCubic = !_isCubic;
+      _clearFields();
     });
   }
 
@@ -68,22 +118,29 @@ class _QuadraticSolverScreenState extends State<QuadraticSolverScreen> {
     return Scaffold(
       backgroundColor: AppColors.primaryDark,
       appBar: AppBar(
-        title: const Text('Quadratic Equation Solver'),
+        title: Text(_isCubic ? 'Cubic Equation Solver' : 'Quadratic Equation Solver'),
         backgroundColor: AppColors.secondaryDark,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          IconButton(
+            icon: Icon(_isCubic ? Icons.toggle_on : Icons.toggle_off),
+            onPressed: _toggleEquationType,
+            tooltip: _isCubic ? 'Switch to Quadratic' : 'Switch to Cubic',
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Solve: ax² + bx + c = 0',
-              style: TextStyle(
+            Text(
+              _isCubic ? 'Solve: ax³ + bx² + cx + d = 0' : 'Solve: ax² + bx + c = 0',
+              style: const TextStyle(
                 color: AppColors.textPrimary,
                 fontSize: 20,
                 fontWeight: FontWeight.w600,
@@ -105,6 +162,11 @@ class _QuadraticSolverScreenState extends State<QuadraticSolverScreen> {
                 Expanded(
                   child: _buildCoefficientInput('c', _cController),
                 ),
+                if (_isCubic) const SizedBox(width: 16),
+                if (_isCubic)
+                  Expanded(
+                    child: _buildCoefficientInput('d', _dController),
+                  ),
               ],
             ),
             
@@ -125,7 +187,7 @@ class _QuadraticSolverScreenState extends State<QuadraticSolverScreen> {
                   child: CalculatorButton(
                     text: 'Solve',
                     backgroundColor: AppColors.accentPurple,
-                    onPressed: _solveQuadratic,
+                    onPressed: _solveEquation,
                   ),
                 ),
               ],
@@ -147,22 +209,79 @@ class _QuadraticSolverScreenState extends State<QuadraticSolverScreen> {
             
             const SizedBox(height: 24),
             
-            // Results
+            // Tabs for Results and Steps
             Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.secondaryDark,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: SingleChildScrollView(
-                  child: Text(
-                    _result,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 16,
+              child: DefaultTabController(
+                length: 2,
+                child: Column(
+                  children: [
+                    const TabBar(
+                      tabs: [
+                        Tab(text: 'Results'),
+                        Tab(text: 'Solution Steps'),
+                      ],
+                      indicatorColor: AppColors.accentPurple,
+                      labelColor: AppColors.accentPurple,
+                      unselectedLabelColor: AppColors.textSecondary,
                     ),
-                  ),
+                    Expanded(
+                      child: TabBarView(
+                        children: [
+                          // Results Tab
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: AppColors.secondaryDark,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: SingleChildScrollView(
+                              child: Text(
+                                _result,
+                                style: const TextStyle(
+                                  color: AppColors.textPrimary,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                          ),
+                          
+                          // Steps Tab
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: AppColors.secondaryDark,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: _steps.isEmpty
+                                ? const Center(
+                                    child: Text(
+                                      'Solve an equation to see the steps',
+                                      style: TextStyle(
+                                        color: AppColors.textSecondary,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  )
+                                : ListView.builder(
+                                    itemCount: _steps.length,
+                                    itemBuilder: (context, index) {
+                                      return Padding(
+                                        padding: const EdgeInsets.symmetric(vertical: 8.0),
+                                        child: Text(
+                                          _steps[index],
+                                          style: const TextStyle(
+                                            color: AppColors.textPrimary,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -208,6 +327,7 @@ class _QuadraticSolverScreenState extends State<QuadraticSolverScreen> {
     _aController.dispose();
     _bController.dispose();
     _cController.dispose();
+    _dController.dispose();
     super.dispose();
   }
 }
